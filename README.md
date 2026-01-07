@@ -15,7 +15,7 @@ A Python code quality evaluation system powered by LLMs. Supports **HuggingFace*
 
 - **Backend**: FastAPI, Python 3.11+
 - **AI**: HuggingFace Inference API or Perplexity API
-- **Database**: SQLAlchemy + SQLite
+- **Database**: SQLAlchemy + SQLite (auto-created, no setup needed)
 - **Validation**: Pydantic v2
 - **Testing**: Pytest
 
@@ -70,20 +70,26 @@ foliage/
    pip install -r requirements.txt
    ```
 
-4. Set up environment variables (choose one provider):
+4. Set up environment variables:
+   ```bash
+   # Copy the example env file
+   cp .env.example.example .env.example
+
+   # Edit .env.example and fill in your credentials
+   ```
+
+   Or set them directly (choose one provider):
 
    **Option A: HuggingFace (free)**
    ```bash
    export LLM_PROVIDER=huggingface
    export HF_API_TOKEN=your_token  # Get from https://huggingface.co/settings/tokens
-   export HF_MODEL_ID=mistralai/Mixtral-8x7B-Instruct-v0.1  # Optional
    ```
 
    **Option B: Perplexity**
    ```bash
    export LLM_PROVIDER=perplexity
    export PERPLEXITY_API_KEY=your_api_key  # Get from https://perplexity.ai/settings/api
-   export PERPLEXITY_MODEL=llama-3.1-sonar-small-128k-online  # Optional
    ```
 
 5. Run the application:
@@ -93,7 +99,14 @@ foliage/
 
 6. Open http://localhost:8000 in your browser
 
-### Docker
+### Docker (Optional)
+
+> **Note:** Docker is **not required** for local development. It's only useful if you want to:
+> - Deploy to a server without installing Python/dependencies
+> - Share the app with others as a single runnable container
+> - Ensure consistent environment across machines
+>
+> For local use, just run `uvicorn app.main:app --reload` directly.
 
 1. Build the image:
    ```bash
@@ -233,6 +246,17 @@ The evaluator detects issues in the following categories:
 - `llama-3.1-sonar-small-128k-online` (default, fast)
 - `llama-3.1-sonar-large-128k-online` (better quality)
 - `llama-3.1-sonar-huge-128k-online` (best quality)
+
+## About SQLite
+
+This app uses **SQLite** to store evaluation history. Key points:
+
+- **No setup required** - SQLite creates a file (`evaluations.db`) automatically on first run
+- **Purpose** - Saves evaluations so you can retrieve them later via `/api/evaluation/{id}` or `/api/history`
+- **Local only** - The database file is stored in your project directory
+- **Optional** - If you don't need history, the app still works (evaluations just won't persist)
+
+For production with multiple users, you could swap SQLite for PostgreSQL by changing the `DATABASE_URL` environment variable.
 
 ## License
 

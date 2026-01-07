@@ -4,10 +4,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+# Load environment variables from .env.example file
+load_dotenv()
 
 from app.database import init_db
 from app.routes import router

@@ -8,9 +8,11 @@ venv/
 env/
 .venv/
 .env/
+.env.example/
 
 # Environment variables
 .env
+.env.example
 .env.local
 .env.*.local
 
