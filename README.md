@@ -10,6 +10,7 @@ A Python code quality evaluation system powered by LLMs. Supports **HuggingFace*
 - **Complexity Analysis**: Time and memory complexity estimates
 - **Evaluation History**: Store and retrieve past evaluations
 - **Web Interface**: Simple HTML form for code submission
+- **Provider Comparison**: Compare HuggingFace vs Perplexity side-by-side
 
 ## Tech Stack
 
@@ -194,6 +195,37 @@ List past evaluations with pagination.
 ### GET /health
 
 Health check endpoint.
+
+### POST /api/compare
+
+Compare evaluations from both HuggingFace and Perplexity providers.
+
+**Request:**
+```json
+{
+  "code": "def hello():\n    print('Hello')",
+  "filename": "hello.py"
+}
+```
+
+**Response:**
+```json
+{
+  "code": "def hello()...",
+  "huggingface": {
+    "evaluation": { "overall_score": 82.0, "summary": "...", ... },
+    "response_time": 3.45,
+    "error": null
+  },
+  "perplexity": {
+    "evaluation": { "overall_score": 78.0, "summary": "...", ... },
+    "response_time": 1.23,
+    "error": null
+  }
+}
+```
+
+> **Note:** Both providers must be configured (HF_API_TOKEN and PERPLEXITY_API_KEY) to use comparison. If one is missing, that provider will return an error message.
 
 ## Running Tests
 

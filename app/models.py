@@ -105,3 +105,19 @@ class HistoryResponse(BaseModel):
 
     evaluations: list[EvaluationSummary] = Field(description="List of evaluations")
     total: int = Field(description="Total number of evaluations")
+
+
+class ProviderResult(BaseModel):
+    """Result from a single provider."""
+
+    evaluation: CodeEvaluation | None = Field(description="Evaluation results if successful")
+    response_time: float | None = Field(description="Response time in seconds")
+    error: str | None = Field(description="Error message if failed")
+
+
+class ComparisonResponse(BaseModel):
+    """Response model for provider comparison."""
+
+    code: str = Field(description="The evaluated code")
+    huggingface: ProviderResult = Field(description="HuggingFace results")
+    perplexity: ProviderResult = Field(description="Perplexity results")

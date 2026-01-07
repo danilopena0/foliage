@@ -20,7 +20,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
@@ -70,6 +70,12 @@
             resize: vertical;
         }
 
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
         button {
             background: #00d9ff;
             color: #1a1a2e;
@@ -91,6 +97,14 @@
             cursor: not-allowed;
         }
 
+        button.secondary {
+            background: #e94560;
+        }
+
+        button.secondary:hover {
+            background: #c73e54;
+        }
+
         .results-section {
             background: #16213e;
             padding: 2rem;
@@ -100,6 +114,55 @@
 
         .results-section.visible {
             display: block;
+        }
+
+        /* Comparison layout */
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 900px) {
+            .comparison-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .provider-card {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .provider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #0f3460;
+        }
+
+        .provider-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .provider-name.huggingface { color: #ffcc00; }
+        .provider-name.perplexity { color: #00d9ff; }
+
+        .provider-time {
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .provider-error {
+            background: #ff004433;
+            border: 1px solid #ff0044;
+            padding: 1rem;
+            border-radius: 4px;
+            color: #ff6666;
         }
 
         .score {
@@ -117,25 +180,26 @@
 
         .summary {
             text-align: center;
-            margin-bottom: 2rem;
-            font-size: 1.1rem;
+            margin-bottom: 1.5rem;
+            font-size: 1rem;
             color: #aaa;
         }
 
         .section-title {
-            font-size: 1.25rem;
-            margin: 1.5rem 0 1rem;
+            font-size: 1.1rem;
+            margin: 1.25rem 0 0.75rem;
             color: #00d9ff;
             border-bottom: 1px solid #0f3460;
             padding-bottom: 0.5rem;
         }
 
         .issue {
-            background: #1a1a2e;
-            padding: 1rem;
+            background: #16213e;
+            padding: 0.75rem;
             border-radius: 4px;
-            margin-bottom: 1rem;
+            margin-bottom: 0.75rem;
             border-left: 4px solid #ff6600;
+            font-size: 0.9rem;
         }
 
         .issue.critical { border-left-color: #ff0044; }
@@ -152,14 +216,14 @@
 
         .issue-category {
             background: #0f3460;
-            padding: 0.25rem 0.5rem;
+            padding: 0.2rem 0.4rem;
             border-radius: 4px;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             text-transform: uppercase;
         }
 
         .issue-severity {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             text-transform: uppercase;
             font-weight: 600;
         }
@@ -170,18 +234,18 @@
         .issue-severity.low { color: #88ff00; }
 
         .issue-line {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: #888;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.25rem;
         }
 
         .issue-description {
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.25rem;
         }
 
         .issue-suggestion {
             color: #00d9ff;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }
 
         .issue-fix {
@@ -190,18 +254,19 @@
             border-radius: 4px;
             margin-top: 0.5rem;
             font-family: 'Fira Code', monospace;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             white-space: pre-wrap;
         }
 
         .strength-list, .improvement-list {
             list-style: none;
             padding: 0;
+            font-size: 0.9rem;
         }
 
         .strength-list li, .improvement-list li {
-            padding: 0.5rem 0;
-            padding-left: 1.5rem;
+            padding: 0.4rem 0;
+            padding-left: 1.25rem;
             position: relative;
         }
 
@@ -221,19 +286,19 @@
 
         .complexity {
             display: flex;
-            gap: 2rem;
-            margin-top: 1rem;
+            gap: 1rem;
+            margin-top: 0.75rem;
         }
 
         .complexity-item {
-            background: #1a1a2e;
-            padding: 1rem;
+            background: #16213e;
+            padding: 0.75rem;
             border-radius: 4px;
             flex: 1;
         }
 
         .complexity-label {
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             color: #888;
             margin-bottom: 0.25rem;
         }
@@ -241,6 +306,7 @@
         .complexity-value {
             font-family: 'Fira Code', monospace;
             color: #00d9ff;
+            font-size: 0.9rem;
         }
 
         .loading {
@@ -270,18 +336,10 @@
             margin-top: 1rem;
         }
 
-        .history-link {
-            text-align: center;
-            margin-top: 1rem;
-        }
-
-        .history-link a {
-            color: #00d9ff;
-            text-decoration: none;
-        }
-
-        .history-link a:hover {
-            text-decoration: underline;
+        /* Single result view */
+        .single-result {
+            max-width: 800px;
+            margin: 0 auto;
         }
     </style>
 </head>
@@ -299,31 +357,21 @@
                     <label for="code">Python Code</label>
                     <textarea id="code" name="code" placeholder="Paste your Python code here..." required></textarea>
                 </div>
-                <button type="submit" id="submitBtn">Evaluate Code</button>
+                <div class="button-group">
+                    <button type="submit" id="submitBtn">Evaluate Code</button>
+                    <button type="button" id="compareBtn" class="secondary">Compare Providers</button>
+                </div>
             </form>
         </div>
 
         <div class="results-section" id="results">
             <div class="loading" id="loading">
                 <div class="spinner"></div>
-                <p>Analyzing your code...</p>
+                <p id="loadingText">Analyzing your code...</p>
             </div>
 
-            <div id="resultsContent" style="display: none;">
-                <div class="score" id="score"></div>
-                <div class="summary" id="summaryText"></div>
-
-                <div class="complexity" id="complexity"></div>
-
-                <h3 class="section-title">Issues Found</h3>
-                <div id="issues"></div>
-
-                <h3 class="section-title">Strengths</h3>
-                <ul class="strength-list" id="strengths"></ul>
-
-                <h3 class="section-title">Areas for Improvement</h3>
-                <ul class="improvement-list" id="improvements"></ul>
-            </div>
+            <div id="singleResult" class="single-result" style="display: none;"></div>
+            <div id="comparisonResult" class="comparison-grid" style="display: none;"></div>
 
             <div class="error" id="error" style="display: none;"></div>
         </div>
@@ -333,43 +381,81 @@
         const form = document.getElementById('evaluationForm');
         const resultsSection = document.getElementById('results');
         const loading = document.getElementById('loading');
-        const resultsContent = document.getElementById('resultsContent');
+        const loadingText = document.getElementById('loadingText');
+        const singleResult = document.getElementById('singleResult');
+        const comparisonResult = document.getElementById('comparisonResult');
         const errorDiv = document.getElementById('error');
         const submitBtn = document.getElementById('submitBtn');
+        const compareBtn = document.getElementById('compareBtn');
 
+        // Single evaluation
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            await runEvaluation(false);
+        });
 
+        // Compare providers
+        compareBtn.addEventListener('click', async () => {
+            await runEvaluation(true);
+        });
+
+        async function runEvaluation(isComparison) {
             const code = document.getElementById('code').value;
             const filename = document.getElementById('filename').value || null;
 
+            if (!code.trim()) {
+                alert('Please enter some code to evaluate');
+                return;
+            }
+
             resultsSection.classList.add('visible');
             loading.style.display = 'block';
-            resultsContent.style.display = 'none';
+            loadingText.textContent = isComparison
+                ? 'Comparing providers (this may take a moment)...'
+                : 'Analyzing your code...';
+            singleResult.style.display = 'none';
+            comparisonResult.style.display = 'none';
             errorDiv.style.display = 'none';
             submitBtn.disabled = true;
+            compareBtn.disabled = true;
 
             try {
-                const submitResponse = await fetch('/api/evaluate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code, filename })
-                });
+                if (isComparison) {
+                    const response = await fetch('/api/compare', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code, filename })
+                    });
 
-                if (!submitResponse.ok) {
-                    const error = await submitResponse.json();
-                    throw new Error(error.detail || 'Evaluation failed');
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'Comparison failed');
+                    }
+
+                    const result = await response.json();
+                    displayComparison(result);
+                } else {
+                    const submitResponse = await fetch('/api/evaluate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code, filename })
+                    });
+
+                    if (!submitResponse.ok) {
+                        const error = await submitResponse.json();
+                        throw new Error(error.detail || 'Evaluation failed');
+                    }
+
+                    const { evaluation_id } = await submitResponse.json();
+
+                    const evalResponse = await fetch(`/api/evaluation/${evaluation_id}`);
+                    if (!evalResponse.ok) {
+                        throw new Error('Failed to retrieve evaluation results');
+                    }
+
+                    const result = await evalResponse.json();
+                    displaySingleResult(result.evaluation);
                 }
-
-                const { evaluation_id } = await submitResponse.json();
-
-                const evalResponse = await fetch(`/api/evaluation/${evaluation_id}`);
-                if (!evalResponse.ok) {
-                    throw new Error('Failed to retrieve evaluation results');
-                }
-
-                const result = await evalResponse.json();
-                displayResults(result.evaluation);
 
             } catch (err) {
                 errorDiv.textContent = err.message;
@@ -377,72 +463,112 @@
             } finally {
                 loading.style.display = 'none';
                 submitBtn.disabled = false;
+                compareBtn.disabled = false;
             }
-        });
+        }
 
-        function displayResults(evaluation) {
-            const scoreEl = document.getElementById('score');
+        function displaySingleResult(evaluation) {
+            singleResult.innerHTML = renderEvaluation(evaluation);
+            singleResult.style.display = 'block';
+        }
+
+        function displayComparison(result) {
+            comparisonResult.innerHTML = `
+                <div class="provider-card">
+                    <div class="provider-header">
+                        <span class="provider-name huggingface">HuggingFace</span>
+                        ${result.huggingface.response_time
+                            ? `<span class="provider-time">${result.huggingface.response_time}s</span>`
+                            : ''}
+                    </div>
+                    ${result.huggingface.error
+                        ? `<div class="provider-error">${result.huggingface.error}</div>`
+                        : renderEvaluation(result.huggingface.evaluation)}
+                </div>
+                <div class="provider-card">
+                    <div class="provider-header">
+                        <span class="provider-name perplexity">Perplexity</span>
+                        ${result.perplexity.response_time
+                            ? `<span class="provider-time">${result.perplexity.response_time}s</span>`
+                            : ''}
+                    </div>
+                    ${result.perplexity.error
+                        ? `<div class="provider-error">${result.perplexity.error}</div>`
+                        : renderEvaluation(result.perplexity.evaluation)}
+                </div>
+            `;
+            comparisonResult.style.display = 'grid';
+        }
+
+        function renderEvaluation(evaluation) {
+            if (!evaluation) return '<div class="provider-error">No evaluation data</div>';
+
             const score = evaluation.overall_score;
-            scoreEl.textContent = score.toFixed(1);
-            scoreEl.className = 'score ' + getScoreClass(score);
+            const scoreClass = getScoreClass(score);
 
-            document.getElementById('summaryText').textContent = evaluation.summary;
+            let html = `
+                <div class="score ${scoreClass}">${score.toFixed(1)}</div>
+                <div class="summary">${evaluation.summary}</div>
+            `;
 
-            const complexityDiv = document.getElementById('complexity');
-            complexityDiv.innerHTML = '';
+            // Complexity
             if (evaluation.time_complexity || evaluation.memory_complexity) {
+                html += '<div class="complexity">';
                 if (evaluation.time_complexity) {
-                    complexityDiv.innerHTML += `
+                    html += `
                         <div class="complexity-item">
-                            <div class="complexity-label">Time Complexity</div>
+                            <div class="complexity-label">Time</div>
                             <div class="complexity-value">${evaluation.time_complexity}</div>
                         </div>
                     `;
                 }
                 if (evaluation.memory_complexity) {
-                    complexityDiv.innerHTML += `
+                    html += `
                         <div class="complexity-item">
-                            <div class="complexity-label">Memory Complexity</div>
+                            <div class="complexity-label">Memory</div>
                             <div class="complexity-value">${evaluation.memory_complexity}</div>
                         </div>
                     `;
                 }
+                html += '</div>';
             }
 
-            const issuesDiv = document.getElementById('issues');
-            issuesDiv.innerHTML = '';
+            // Issues
+            html += '<h3 class="section-title">Issues</h3>';
             if (evaluation.issues.length === 0) {
-                issuesDiv.innerHTML = '<p>No issues found!</p>';
+                html += '<p>No issues found!</p>';
             } else {
                 evaluation.issues.forEach(issue => {
-                    issuesDiv.innerHTML += `
+                    html += `
                         <div class="issue ${issue.severity}">
                             <div class="issue-header">
                                 <span class="issue-category">${issue.category}</span>
                                 <span class="issue-severity ${issue.severity}">${issue.severity}</span>
                             </div>
                             ${issue.line_number ? `<div class="issue-line">Line ${issue.line_number}</div>` : ''}
-                            <div class="issue-description">${issue.description}</div>
-                            <div class="issue-suggestion">${issue.suggestion}</div>
+                            <div class="issue-description">${escapeHtml(issue.description)}</div>
+                            <div class="issue-suggestion">${escapeHtml(issue.suggestion)}</div>
                             ${issue.example_fix ? `<div class="issue-fix">${escapeHtml(issue.example_fix)}</div>` : ''}
                         </div>
                     `;
                 });
             }
 
-            const strengthsList = document.getElementById('strengths');
-            strengthsList.innerHTML = '';
-            evaluation.strengths.forEach(strength => {
-                strengthsList.innerHTML += `<li>${strength}</li>`;
+            // Strengths
+            html += '<h3 class="section-title">Strengths</h3><ul class="strength-list">';
+            evaluation.strengths.forEach(s => {
+                html += `<li>${escapeHtml(s)}</li>`;
             });
+            html += '</ul>';
 
-            const improvementsList = document.getElementById('improvements');
-            improvementsList.innerHTML = '';
-            evaluation.improvement_areas.forEach(area => {
-                improvementsList.innerHTML += `<li>${area}</li>`;
+            // Improvements
+            html += '<h3 class="section-title">Improvements</h3><ul class="improvement-list">';
+            evaluation.improvement_areas.forEach(a => {
+                html += `<li>${escapeHtml(a)}</li>`;
             });
+            html += '</ul>';
 
-            resultsContent.style.display = 'block';
+            return html;
         }
 
         function getScoreClass(score) {

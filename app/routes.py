@@ -10,14 +10,16 @@ from app.database import (
     get_evaluation_count,
     get_evaluation_history,
 )
-from app.evaluator import evaluate_code_sync
+from app.evaluator import compare_providers, evaluate_code_sync
 from app.models import (
     CodeEvaluation,
     CodeSubmission,
+    ComparisonResponse,
     EvaluationResponse,
     EvaluationResult,
     EvaluationSummary,
     HistoryResponse,
+    ProviderResult,
 )
 
 
@@ -156,3 +158,36 @@ async def get_history(
     ]
 
     return HistoryResponse(evaluations=summaries, total=total)
+
+
+@router.post(
+    "/compare",
+    response_model=ComparisonResponse,
+    summary="Compare providers",
+    description="Evaluate code using both HuggingFace and Perplexity, compare results side by side.",
+)
+async def compare_evaluations(submission: CodeSubmission) -> ComparisonResponse:
+    """
+    Compare evaluation results from both providers.
+
+    Args:
+        submission: The code submission containing the code and optional filename.
+
+    Returns:
+        ComparisonResponse with results from both providers.
+    """
+    results = compare_providers(submission.code, submission.filename)
+
+    return ComparisonResponse(
+        code=submission.code,
+        huggingface=ProviderResult(
+            evaluation=results["huggingface"],
+            response_time=results["huggingface_time"],
+            error=results["huggingface_error"],
+        ),
+        perplexity=ProviderResult(
+            evaluation=results["perplexity"],
+            response_time=results["perplexity_time"],
+            error=results["perplexity_error"],
+        ),
+    )
