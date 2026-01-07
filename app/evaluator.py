@@ -97,15 +97,42 @@ def parse_evaluation_response(response_text: str) -> dict:
     """
     text = response_text.strip()
 
-    # Try to extract JSON from the response
-    json_match = re.search(r'\{[\s\S]*\}', text)
-    if json_match:
-        text = json_match.group()
+    # Try to extract JSON from the response - find the outermost braces
+    brace_count = 0
+    start_idx = None
+    end_idx = None
+
+    for i, char in enumerate(text):
+        if char == '{':
+            if start_idx is None:
+                start_idx = i
+            brace_count += 1
+        elif char == '}':
+            brace_count -= 1
+            if brace_count == 0 and start_idx is not None:
+                end_idx = i + 1
+                break
+
+    if start_idx is not None and end_idx is not None:
+        text = text[start_idx:end_idx]
 
     try:
         return json.loads(text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse LLM response as JSON: {e}\nResponse: {text[:500]}")
+    except json.JSONDecodeError:
+        # If JSON parsing fails, return a default evaluation with warning and raw response
+        print(f"WARNING: Could not parse LLM response as JSON.")
+        return {
+            "overall_score": 50,
+            "summary": "⚠️ WARNING: Could not parse response as JSON. Raw LLM response shown below.",
+            "issues": [],
+            "strengths": [],
+            "improvement_areas": [
+                "Try a different model like 'mistralai/Mistral-7B-Instruct-v0.3'",
+                f"RAW RESPONSE: {response_text}"
+            ],
+            "time_complexity": None,
+            "memory_complexity": None,
+        }
 
 
 def validate_and_build_evaluation(data: dict) -> CodeEvaluation:
