@@ -9,7 +9,8 @@
       "Bash(gh repo view:*)",
       "Bash(gh issue create --title \"Multi-model comparison for HuggingFace\" --body \"$\\(cat <<''EOF''\n## Description\nAllow comparing different HuggingFace models side-by-side \\(not just HuggingFace vs Perplexity\\).\n\n## Proposed Solution\n- Add model selector dropdown in UI\n- Create endpoint to compare multiple HF models\n- Store model name with each evaluation\n\n```python\nPOST /api/compare-models\n{\n    \"code\": \"...\",\n    \"models\": [\n        \"mistralai/Mistral-7B-Instruct-v0.3\",\n        \"meta-llama/Meta-Llama-3-8B-Instruct\",\n        \"HuggingFaceH4/zephyr-7b-beta\"\n    ]\n}\n```\n\n## Priority\n🔥 High\nEOF\n\\)\" --label \"enhancement\")",
       "Bash(gh issue create --title \"Improve JSON parsing for free HuggingFace models\" --body \"$\\(cat <<''EOF''\n## Problem\nFree HuggingFace models often don''t return valid JSON, causing parsing failures.\n\n## Current Behavior\nShows warning with raw response when JSON parsing fails.\n\n## Proposed Solutions\n- Try multiple parsing strategies \\(regex extraction, partial JSON repair\\)\n- Add retry logic with rephrased prompt\n- Use models known to follow instructions well\n- Consider using `outlines` library for constrained generation\n\n## Priority\n🔥 High\nEOF\n\\)\" --label \"bug,enhancement\")",
-      "Bash(gh issue create:*)"
+      "Bash(gh issue create:*)",
+      "Bash(gh issue list:*)"
     ]
   }
 }
