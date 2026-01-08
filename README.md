@@ -98,7 +98,13 @@ foliage/
    uvicorn app.main:app --reload
    ```
 
-6. Open http://localhost:8000 in your browser
+6. Open the app in your browser:
+
+   | URL | Description |
+   |-----|-------------|
+   | http://localhost:8000 | Main web interface |
+   | http://localhost:8000/docs | Swagger UI (interactive API docs) |
+   | http://localhost:8000/redoc | ReDoc (alternative API docs) |
 
 ### Docker (Optional)
 
