@@ -25,8 +25,8 @@ class LLMProvider(str, Enum):
 # Available HuggingFace models for multi-model comparison
 AVAILABLE_HF_MODELS = [
     "meta-llama/Meta-Llama-3-8B-Instruct",
-    "Qwen/Qwen2.5-3B-Instruct",
-    "distilbert/distilgpt2",
+    "openai/gpt-oss-20b",
+    "mistralai/Mistral-7B-Instruct-v0.2:featherless-ai",
 ]
 
 
