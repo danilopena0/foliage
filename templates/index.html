@@ -341,6 +341,114 @@
             max-width: 800px;
             margin: 0 auto;
         }
+
+        /* Model selector */
+        .model-selector {
+            margin-bottom: 1.5rem;
+        }
+
+        .model-selector label {
+            margin-bottom: 0.75rem;
+        }
+
+        .model-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .model-checkbox {
+            display: flex;
+            align-items: center;
+            background: #1a1a2e;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid #0f3460;
+            transition: all 0.2s;
+        }
+
+        .model-checkbox:hover {
+            border-color: #00d9ff;
+        }
+
+        .model-checkbox.selected {
+            border-color: #00d9ff;
+            background: #0f3460;
+        }
+
+        .model-checkbox input {
+            margin-right: 0.5rem;
+            accent-color: #00d9ff;
+        }
+
+        .model-checkbox .model-name {
+            font-size: 0.85rem;
+            color: #eee;
+        }
+
+        .model-count {
+            font-size: 0.8rem;
+            color: #888;
+            margin-top: 0.5rem;
+        }
+
+        .model-count.valid { color: #00ff88; }
+        .model-count.invalid { color: #ff6600; }
+
+        button.tertiary {
+            background: #9b59b6;
+        }
+
+        button.tertiary:hover {
+            background: #8e44ad;
+        }
+
+        /* Dynamic comparison grid for multi-model */
+        .multi-model-grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .multi-model-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+        .multi-model-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+        .multi-model-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+        @media (max-width: 1200px) {
+            .multi-model-grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
+            .multi-model-grid.cols-3 { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 768px) {
+            .multi-model-grid { grid-template-columns: 1fr !important; }
+        }
+
+        .model-card {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .model-header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #0f3460;
+        }
+
+        .model-name-display {
+            font-size: 0.85rem;
+            color: #9b59b6;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .model-time {
+            font-size: 0.8rem;
+            color: #888;
+        }
     </style>
 </head>
 <body>
@@ -357,9 +465,17 @@
                     <label for="code">Python Code</label>
                     <textarea id="code" name="code" placeholder="Paste your Python code here..." required></textarea>
                 </div>
+                <div class="form-group model-selector">
+                    <label>Select HuggingFace Models to Compare (2-4)</label>
+                    <div class="model-checkboxes" id="modelCheckboxes">
+                        <!-- Models loaded dynamically -->
+                    </div>
+                    <div class="model-count" id="modelCount">Select 2-4 models</div>
+                </div>
                 <div class="button-group">
                     <button type="submit" id="submitBtn">Evaluate Code</button>
                     <button type="button" id="compareBtn" class="secondary">Compare Providers</button>
+                    <button type="button" id="compareModelsBtn" class="tertiary" disabled>Compare Models</button>
                 </div>
             </form>
         </div>
@@ -372,6 +488,7 @@
 
             <div id="singleResult" class="single-result" style="display: none;"></div>
             <div id="comparisonResult" class="comparison-grid" style="display: none;"></div>
+            <div id="multiModelResult" class="multi-model-grid" style="display: none;"></div>
 
             <div class="error" id="error" style="display: none;"></div>
         </div>
@@ -384,22 +501,91 @@
         const loadingText = document.getElementById('loadingText');
         const singleResult = document.getElementById('singleResult');
         const comparisonResult = document.getElementById('comparisonResult');
+        const multiModelResult = document.getElementById('multiModelResult');
         const errorDiv = document.getElementById('error');
         const submitBtn = document.getElementById('submitBtn');
         const compareBtn = document.getElementById('compareBtn');
+        const compareModelsBtn = document.getElementById('compareModelsBtn');
+        const modelCheckboxes = document.getElementById('modelCheckboxes');
+        const modelCountDiv = document.getElementById('modelCount');
+
+        let availableModels = [];
+
+        // Load available models on page load
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/models');
+                const data = await response.json();
+                availableModels = data.models;
+                renderModelCheckboxes();
+            } catch (err) {
+                console.error('Failed to load models:', err);
+                modelCheckboxes.innerHTML = '<p style="color: #ff6666;">Failed to load models</p>';
+            }
+        }
+
+        function renderModelCheckboxes() {
+            modelCheckboxes.innerHTML = availableModels.map((model, i) => `
+                <label class="model-checkbox ${i < 2 ? 'selected' : ''}" data-model="${model}">
+                    <input type="checkbox" name="model" value="${model}" ${i < 2 ? 'checked' : ''}>
+                    <span class="model-name">${getShortModelName(model)}</span>
+                </label>
+            `).join('');
+
+            // Add click handlers
+            document.querySelectorAll('.model-checkbox').forEach(label => {
+                label.addEventListener('click', (e) => {
+                    if (e.target.tagName !== 'INPUT') {
+                        const checkbox = label.querySelector('input');
+                        checkbox.checked = !checkbox.checked;
+                    }
+                    label.classList.toggle('selected', label.querySelector('input').checked);
+                    updateModelCount();
+                });
+            });
+
+            updateModelCount();
+        }
+
+        function getShortModelName(model) {
+            // Extract just the model name without org
+            const parts = model.split('/');
+            return parts.length > 1 ? parts[1] : model;
+        }
+
+        function getSelectedModels() {
+            return Array.from(document.querySelectorAll('.model-checkbox input:checked'))
+                .map(cb => cb.value);
+        }
+
+        function updateModelCount() {
+            const selected = getSelectedModels().length;
+            const isValid = selected >= 2 && selected <= 4;
+            modelCountDiv.textContent = `${selected} model${selected !== 1 ? 's' : ''} selected${isValid ? '' : ' (need 2-4)'}`;
+            modelCountDiv.className = `model-count ${isValid ? 'valid' : 'invalid'}`;
+            compareModelsBtn.disabled = !isValid;
+        }
+
+        // Load models on page load
+        loadModels();
 
         // Single evaluation
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            await runEvaluation(false);
+            await runEvaluation('single');
         });
 
-        // Compare providers
+        // Compare providers (HF vs Perplexity)
         compareBtn.addEventListener('click', async () => {
-            await runEvaluation(true);
+            await runEvaluation('providers');
         });
 
-        async function runEvaluation(isComparison) {
+        // Compare HuggingFace models
+        compareModelsBtn.addEventListener('click', async () => {
+            await runEvaluation('models');
+        });
+
+        async function runEvaluation(mode) {
             const code = document.getElementById('code').value;
             const filename = document.getElementById('filename').value || null;
 
@@ -410,17 +596,40 @@
 
             resultsSection.classList.add('visible');
             loading.style.display = 'block';
-            loadingText.textContent = isComparison
-                ? 'Comparing providers (this may take a moment)...'
-                : 'Analyzing your code...';
             singleResult.style.display = 'none';
             comparisonResult.style.display = 'none';
+            multiModelResult.style.display = 'none';
             errorDiv.style.display = 'none';
             submitBtn.disabled = true;
             compareBtn.disabled = true;
+            compareModelsBtn.disabled = true;
+
+            if (mode === 'single') {
+                loadingText.textContent = 'Analyzing your code...';
+            } else if (mode === 'providers') {
+                loadingText.textContent = 'Comparing providers (this may take a moment)...';
+            } else {
+                const modelCount = getSelectedModels().length;
+                loadingText.textContent = `Comparing ${modelCount} models (this may take a while)...`;
+            }
 
             try {
-                if (isComparison) {
+                if (mode === 'models') {
+                    const models = getSelectedModels();
+                    const response = await fetch('/api/compare-models', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code, filename, models })
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'Model comparison failed');
+                    }
+
+                    const result = await response.json();
+                    displayMultiModelComparison(result);
+                } else if (mode === 'providers') {
                     const response = await fetch('/api/compare', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -464,6 +673,7 @@
                 loading.style.display = 'none';
                 submitBtn.disabled = false;
                 compareBtn.disabled = false;
+                updateModelCount(); // Re-enable compare models if valid
             }
         }
 
@@ -500,6 +710,27 @@
             comparisonResult.style.display = 'grid';
         }
 
+        function displayMultiModelComparison(result) {
+            const numModels = result.results.length;
+            multiModelResult.className = `multi-model-grid cols-${numModels}`;
+
+            multiModelResult.innerHTML = result.results.map(r => `
+                <div class="model-card">
+                    <div class="model-header">
+                        <span class="model-name-display">${getShortModelName(r.model_name)}</span>
+                        ${r.response_time
+                            ? `<span class="model-time">${r.response_time}s</span>`
+                            : ''}
+                    </div>
+                    ${r.error
+                        ? `<div class="provider-error">${r.error}</div>`
+                        : renderEvaluation(r.evaluation)}
+                </div>
+            `).join('');
+
+            multiModelResult.style.display = 'grid';
+        }
+
         function renderEvaluation(evaluation) {
             if (!evaluation) return '<div class="provider-error">No evaluation data</div>';
 
@@ -508,7 +739,7 @@
 
             let html = `
                 <div class="score ${scoreClass}">${score.toFixed(1)}</div>
-                <div class="summary">${evaluation.summary}</div>
+                <div class="summary">${escapeHtml(evaluation.summary)}</div>
             `;
 
             // Complexity

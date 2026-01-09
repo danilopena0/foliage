@@ -10,7 +10,7 @@ from app.database import (
     get_evaluation_count,
     get_evaluation_history,
 )
-from app.evaluator import compare_providers, evaluate_code_sync
+from app.evaluator import AVAILABLE_HF_MODELS, compare_hf_models, compare_providers, evaluate_code_sync
 from app.models import (
     CodeEvaluation,
     CodeSubmission,
@@ -19,6 +19,9 @@ from app.models import (
     EvaluationResult,
     EvaluationSummary,
     HistoryResponse,
+    ModelComparisonRequest,
+    ModelComparisonResponse,
+    ModelResult,
     ProviderResult,
 )
 
@@ -190,4 +193,51 @@ async def compare_evaluations(submission: CodeSubmission) -> ComparisonResponse:
             response_time=results["perplexity_time"],
             error=results["perplexity_error"],
         ),
+    )
+
+
+@router.get(
+    "/models",
+    summary="List available models",
+    description="Get a list of available HuggingFace models for comparison.",
+)
+async def list_models() -> dict:
+    """
+    List available HuggingFace models for multi-model comparison.
+
+    Returns:
+        Dictionary with list of available model IDs.
+    """
+    return {"models": AVAILABLE_HF_MODELS}
+
+
+@router.post(
+    "/compare-models",
+    response_model=ModelComparisonResponse,
+    summary="Compare HuggingFace models",
+    description="Evaluate code using multiple HuggingFace models (2-4) and compare results side by side.",
+)
+async def compare_models(request: ModelComparisonRequest) -> ModelComparisonResponse:
+    """
+    Compare evaluation results from multiple HuggingFace models.
+
+    Args:
+        request: The comparison request containing code and list of models.
+
+    Returns:
+        ModelComparisonResponse with results from each model.
+    """
+    results = compare_hf_models(request.code, request.models, request.filename)
+
+    return ModelComparisonResponse(
+        code=request.code,
+        results=[
+            ModelResult(
+                model_name=r["model_name"],
+                evaluation=r["evaluation"],
+                response_time=r["response_time"],
+                error=r["error"],
+            )
+            for r in results
+        ],
     )

@@ -22,6 +22,14 @@ class LLMProvider(str, Enum):
     PERPLEXITY = "perplexity"
 
 
+# Available HuggingFace models for multi-model comparison
+AVAILABLE_HF_MODELS = [
+    "meta-llama/Meta-Llama-3-8B-Instruct",
+    "Qwen/Qwen2.5-3B-Instruct",
+    "distilbert/distilgpt2",
+]
+
+
 def get_config():
     """Get configuration from environment variables."""
     return {
@@ -210,6 +218,34 @@ def evaluate_with_huggingface(prompt: str) -> str:
     return response.choices[0].message.content
 
 
+def evaluate_with_model(prompt: str, model_id: str) -> str:
+    """
+    Evaluate code using a specific HuggingFace model.
+
+    Args:
+        prompt: The formatted evaluation prompt.
+        model_id: The HuggingFace model ID to use.
+
+    Returns:
+        Raw response text from the model.
+    """
+    client = get_hf_client()
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+    response = client.chat_completion(
+        model=model_id,
+        messages=messages,
+        max_tokens=2048,
+        temperature=0.1,
+    )
+
+    return response.choices[0].message.content
+
+
 def evaluate_with_perplexity(prompt: str) -> str:
     """
     Evaluate code using Perplexity API.
@@ -338,5 +374,57 @@ def compare_providers(code: str, filename: str | None = None) -> dict:
             results["perplexity_error"] = str(e)
     else:
         results["perplexity_error"] = "PERPLEXITY_API_KEY not configured"
+
+    return results
+
+
+def compare_hf_models(code: str, models: list[str], filename: str | None = None) -> list[dict]:
+    """
+    Evaluate code using multiple HuggingFace models.
+
+    Args:
+        code: The Python code to evaluate.
+        models: List of HuggingFace model IDs to use.
+        filename: Optional filename for additional context.
+
+    Returns:
+        List of result dictionaries with model_name, evaluation, response_time, and error.
+    """
+    import time
+
+    config = get_config()
+    if not config["hf_api_token"]:
+        return [
+            {
+                "model_name": model,
+                "evaluation": None,
+                "response_time": None,
+                "error": "HF_API_TOKEN not configured",
+            }
+            for model in models
+        ]
+
+    context = ""
+    if filename:
+        context = f"Filename: {filename}\n\n"
+    prompt = context + EVALUATION_PROMPT.format(code=code)
+
+    results = []
+    for model_id in models:
+        result = {
+            "model_name": model_id,
+            "evaluation": None,
+            "response_time": None,
+            "error": None,
+        }
+        try:
+            start = time.time()
+            response_text = evaluate_with_model(prompt, model_id)
+            result["response_time"] = round(time.time() - start, 2)
+            evaluation_data = parse_evaluation_response(response_text)
+            result["evaluation"] = validate_and_build_evaluation(evaluation_data)
+        except Exception as e:
+            result["error"] = str(e)
+        results.append(result)
 
     return results

@@ -121,3 +121,29 @@ class ComparisonResponse(BaseModel):
     code: str = Field(description="The evaluated code")
     huggingface: ProviderResult = Field(description="HuggingFace results")
     perplexity: ProviderResult = Field(description="Perplexity results")
+
+
+class ModelComparisonRequest(BaseModel):
+    """Request for multi-model HuggingFace comparison."""
+
+    code: str = Field(min_length=1, description="Python code to evaluate")
+    filename: str | None = Field(default=None, description="Optional filename for context")
+    models: list[str] = Field(
+        min_length=2, max_length=4, description="List of HuggingFace model IDs (2-4 models)"
+    )
+
+
+class ModelResult(BaseModel):
+    """Result from a single model evaluation."""
+
+    model_name: str = Field(description="HuggingFace model ID")
+    evaluation: CodeEvaluation | None = Field(description="Evaluation results if successful")
+    response_time: float | None = Field(description="Response time in seconds")
+    error: str | None = Field(description="Error message if failed")
+
+
+class ModelComparisonResponse(BaseModel):
+    """Response model for multi-model comparison."""
+
+    code: str = Field(description="The evaluated code")
+    results: list[ModelResult] = Field(description="Results from each model")
