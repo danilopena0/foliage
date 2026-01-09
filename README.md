@@ -2,6 +2,10 @@
 
 A Python code quality evaluation system powered by LLMs. Supports **HuggingFace** (free tier) and **Perplexity** APIs. Submit Python code and receive detailed analysis including quality scores, issue detection, and improvement suggestions.
 
+## Demo
+
+https://github.com/user-attachments/assets/foliage_recording_compressed.mp4
+
 ## Features
 
 - **Code Quality Scoring**: Get an overall score (0-100) for your Python code
@@ -39,7 +43,6 @@ foliage/
 │   ├── test_routes.py   # API tests
 │   └── test_database.py # Database tests
 ├── requirements.txt
-├── Dockerfile
 └── README.md
 ```
 
@@ -105,29 +108,6 @@ foliage/
    | http://localhost:8000 | Main web interface |
    | http://localhost:8000/docs | Swagger UI (interactive API docs) |
    | http://localhost:8000/redoc | ReDoc (alternative API docs) |
-
-### Docker (Optional)
-
-> **Note:** Docker is **not required** for local development. It's only useful if you want to:
-> - Deploy to a server without installing Python/dependencies
-> - Share the app with others as a single runnable container
-> - Ensure consistent environment across machines
->
-> For local use, just run `uvicorn app.main:app --reload` directly.
-
-1. Build the image:
-   ```bash
-   docker build -t llm-code-evaluator .
-   ```
-
-2. Run the container:
-   ```bash
-   # With HuggingFace
-   docker run -p 8000:8000 -e LLM_PROVIDER=huggingface -e HF_API_TOKEN=your_token llm-code-evaluator
-
-   # With Perplexity
-   docker run -p 8000:8000 -e LLM_PROVIDER=perplexity -e PERPLEXITY_API_KEY=your_key llm-code-evaluator
-   ```
 
 ## API Endpoints
 
