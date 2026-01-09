@@ -4,7 +4,7 @@ A Python code quality evaluation system powered by LLMs. Supports **HuggingFace*
 
 ## Demo
 
-https://github.com/user-attachments/assets/foliage_recording_compressed.mp4
+[Link to Demo]([url](https://github.com/user-attachments/assets/9186eb70-0d73-424d-ba7a-c4930a765b91))
 
 ## Features
 
