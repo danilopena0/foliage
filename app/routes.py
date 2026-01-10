@@ -1,16 +1,26 @@
 """API routes for the code evaluation system."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.database import (
+    DatabaseError,
     create_evaluation,
     get_db,
     get_evaluation_by_id,
     get_evaluation_count,
     get_evaluation_history,
 )
-from app.evaluator import AVAILABLE_HF_MODELS, compare_hf_models, compare_providers, evaluate_code_sync
+from app.evaluator import (
+    AVAILABLE_HF_MODELS,
+    ConfigurationError,
+    EvaluationError,
+    compare_hf_models,
+    compare_providers,
+    evaluate_code_sync,
+)
 from app.models import (
     CodeEvaluation,
     CodeSubmission,
@@ -25,6 +35,8 @@ from app.models import (
     ProviderResult,
 )
 
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -34,14 +46,13 @@ router = APIRouter()
     response_model=EvaluationResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Submit code for evaluation",
-    description="Submit Python code for quality evaluation using Claude AI.",
+    description="Submit Python code for quality evaluation using the configured LLM provider.",
 )
 async def submit_evaluation(
     submission: CodeSubmission,
     db: Session = Depends(get_db),
 ) -> EvaluationResponse:
-    """
-    Submit Python code for evaluation.
+    """Submit Python code for evaluation.
 
     Args:
         submission: The code submission containing the code and optional filename.
@@ -64,20 +75,35 @@ async def submit_evaluation(
             evaluation_dict=evaluation_dict,
         )
 
+        logger.info("Evaluation completed successfully, ID: %d", record.id)
         return EvaluationResponse(
             evaluation_id=record.id,
             message="Code evaluation completed successfully",
         )
 
-    except ValueError as e:
+    except ConfigurationError as e:
+        logger.warning("Configuration error during evaluation: %s", str(e))
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Configuration error: {str(e)}",
         )
-    except Exception as e:
+    except EvaluationError as e:
+        logger.error("Evaluation error: %s", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"LLM evaluation failed: {str(e)}",
+        )
+    except DatabaseError as e:
+        logger.error("Database error during evaluation: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Evaluation failed: {str(e)}",
+            detail=f"Failed to save evaluation: {str(e)}",
+        )
+    except Exception as e:
+        logger.exception("Unexpected error during evaluation")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected error: {str(e)}",
         )
 
 
@@ -91,8 +117,7 @@ async def get_evaluation(
     evaluation_id: int,
     db: Session = Depends(get_db),
 ) -> EvaluationResult:
-    """
-    Retrieve evaluation results by ID.
+    """Retrieve evaluation results by ID.
 
     Args:
         evaluation_id: The ID of the evaluation to retrieve.
@@ -102,8 +127,14 @@ async def get_evaluation(
         EvaluationResult with complete evaluation data.
 
     Raises:
-        HTTPException: If evaluation not found.
+        HTTPException: If evaluation not found or ID is invalid.
     """
+    if evaluation_id < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Evaluation ID must be a positive integer",
+        )
+
     record = get_evaluation_by_id(db, evaluation_id)
 
     if not record:
@@ -131,12 +162,13 @@ async def get_evaluation(
     description="Retrieve a list of past evaluations with pagination support.",
 )
 async def get_history(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0, description="Number of records to skip"),
+    limit: int = Query(
+        default=100, ge=1, le=1000, description="Maximum records to return"
+    ),
     db: Session = Depends(get_db),
 ) -> HistoryResponse:
-    """
-    Retrieve evaluation history with pagination.
+    """Retrieve evaluation history with pagination.
 
     Args:
         skip: Number of records to skip (for pagination).
@@ -170,8 +202,7 @@ async def get_history(
     description="Evaluate code using both HuggingFace and Perplexity, compare results side by side.",
 )
 async def compare_evaluations(submission: CodeSubmission) -> ComparisonResponse:
-    """
-    Compare evaluation results from both providers.
+    """Compare evaluation results from both providers.
 
     Args:
         submission: The code submission containing the code and optional filename.
@@ -202,8 +233,7 @@ async def compare_evaluations(submission: CodeSubmission) -> ComparisonResponse:
     description="Get a list of available HuggingFace models for comparison.",
 )
 async def list_models() -> dict:
-    """
-    List available HuggingFace models for multi-model comparison.
+    """List available HuggingFace models for multi-model comparison.
 
     Returns:
         Dictionary with list of available model IDs.
@@ -218,8 +248,7 @@ async def list_models() -> dict:
     description="Evaluate code using multiple HuggingFace models (2-4) and compare results side by side.",
 )
 async def compare_models(request: ModelComparisonRequest) -> ModelComparisonResponse:
-    """
-    Compare evaluation results from multiple HuggingFace models.
+    """Compare evaluation results from multiple HuggingFace models.
 
     Args:
         request: The comparison request containing code and list of models.

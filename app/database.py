@@ -1,14 +1,17 @@
 """Database setup and models using SQLAlchemy with SQLite."""
 
 import json
+import logging
 import os
-from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Generator
 
 from sqlalchemy import DateTime, Float, String, Text, create_engine
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+# Configure logging
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./evaluations.db")
 
@@ -16,10 +19,21 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+class DatabaseError(Exception):
+    """Raised when a database operation fails."""
+
+    pass
+
+
 class Base(DeclarativeBase):
     """Base class for SQLAlchemy models."""
 
     pass
+
+
+def _utc_now() -> datetime:
+    """Get current UTC datetime (timezone-aware)."""
+    return datetime.now(UTC)
 
 
 class EvaluationRecord(Base):
@@ -34,7 +48,7 @@ class EvaluationRecord(Base):
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     evaluation_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, nullable=False
+        DateTime, default=_utc_now, nullable=False
     )
 
     def set_evaluation(self, evaluation_dict: dict) -> None:
@@ -49,26 +63,11 @@ class EvaluationRecord(Base):
 def init_db() -> None:
     """Initialize the database by creating all tables."""
     Base.metadata.create_all(bind=engine)
+    logger.info("Database initialized")
 
 
 def get_db() -> Generator[Session, None, None]:
-    """
-    Get a database session.
-
-    Yields:
-        Database session that auto-closes after use.
-    """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-@contextmanager
-def get_db_context() -> Generator[Session, None, None]:
-    """
-    Context manager for database sessions.
+    """Get a database session.
 
     Yields:
         Database session that auto-closes after use.
@@ -86,8 +85,7 @@ def create_evaluation(
     filename: str | None,
     evaluation_dict: dict,
 ) -> EvaluationRecord:
-    """
-    Create a new evaluation record in the database.
+    """Create a new evaluation record in the database.
 
     Args:
         db: Database session.
@@ -97,23 +95,35 @@ def create_evaluation(
 
     Returns:
         The created evaluation record.
+
+    Raises:
+        DatabaseError: If the database operation fails.
     """
-    record = EvaluationRecord(
-        code=code,
-        filename=filename,
-        overall_score=evaluation_dict["overall_score"],
-        summary=evaluation_dict["summary"],
-    )
-    record.set_evaluation(evaluation_dict)
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-    return record
+    try:
+        record = EvaluationRecord(
+            code=code,
+            filename=filename,
+            overall_score=evaluation_dict["overall_score"],
+            summary=evaluation_dict["summary"],
+        )
+        record.set_evaluation(evaluation_dict)
+        db.add(record)
+        db.commit()
+        db.refresh(record)
+        logger.debug("Created evaluation record with ID %d", record.id)
+        return record
+    except IntegrityError as e:
+        db.rollback()
+        logger.error("Integrity error creating evaluation: %s", str(e))
+        raise DatabaseError(f"Failed to create evaluation: integrity error") from e
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error("Database error creating evaluation: %s", str(e))
+        raise DatabaseError(f"Failed to create evaluation: {e}") from e
 
 
 def get_evaluation_by_id(db: Session, evaluation_id: int) -> EvaluationRecord | None:
-    """
-    Retrieve an evaluation by its ID.
+    """Retrieve an evaluation by its ID.
 
     Args:
         db: Database session.
@@ -122,14 +132,17 @@ def get_evaluation_by_id(db: Session, evaluation_id: int) -> EvaluationRecord | 
     Returns:
         The evaluation record if found, None otherwise.
     """
-    return db.query(EvaluationRecord).filter(EvaluationRecord.id == evaluation_id).first()
+    return (
+        db.query(EvaluationRecord)
+        .filter(EvaluationRecord.id == evaluation_id)
+        .first()
+    )
 
 
 def get_evaluation_history(
     db: Session, skip: int = 0, limit: int = 100
 ) -> list[EvaluationRecord]:
-    """
-    Retrieve evaluation history with pagination.
+    """Retrieve evaluation history with pagination.
 
     Args:
         db: Database session.
@@ -141,7 +154,7 @@ def get_evaluation_history(
     """
     return (
         db.query(EvaluationRecord)
-        .order_by(EvaluationRecord.created_at.desc())
+        .order_by(EvaluationRecord.created_at.desc(), EvaluationRecord.id.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -149,8 +162,7 @@ def get_evaluation_history(
 
 
 def get_evaluation_count(db: Session) -> int:
-    """
-    Get the total count of evaluations.
+    """Get the total count of evaluations.
 
     Args:
         db: Database session.

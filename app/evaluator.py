@@ -1,18 +1,30 @@
 """LLM API integration for code evaluation (HuggingFace & Perplexity)."""
 
+import asyncio
 import json
+import logging
 import os
-import re
+import time
 from enum import Enum
+from typing import Any
 
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
-from openai import OpenAI
+from huggingface_hub.utils import HfHubHTTPError
+from openai import APIConnectionError, APITimeoutError, OpenAI, RateLimitError
 
 from app.models import CodeEvaluation, CodeIssue, IssueCategory, IssueSeverity
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 # Load environment variables
 load_dotenv()
+
+# Constants
+MAX_TOKENS = 2048
+TEMPERATURE = 0.1
+MAX_RAW_RESPONSE_LENGTH = 500  # Truncate raw responses in error messages
 
 
 class LLMProvider(str, Enum):
@@ -30,15 +42,62 @@ AVAILABLE_HF_MODELS = [
 ]
 
 
-def get_config():
-    """Get configuration from environment variables."""
+class ConfigurationError(Exception):
+    """Raised when configuration is invalid or missing."""
+
+    pass
+
+
+class EvaluationError(Exception):
+    """Raised when code evaluation fails."""
+
+    pass
+
+
+def get_config() -> dict[str, Any]:
+    """Get configuration from environment variables.
+
+    Returns:
+        Configuration dictionary with LLM provider settings.
+    """
     return {
         "llm_provider": os.getenv("LLM_PROVIDER", "huggingface").lower(),
         "hf_api_token": os.getenv("HF_API_TOKEN"),
         "hf_model_id": os.getenv("HF_MODEL_ID", "mistralai/Mixtral-8x7B-Instruct-v0.1"),
         "perplexity_api_key": os.getenv("PERPLEXITY_API_KEY"),
-        "perplexity_model": os.getenv("PERPLEXITY_MODEL", "llama-3.1-sonar-small-128k-online"),
+        "perplexity_model": os.getenv(
+            "PERPLEXITY_MODEL", "llama-3.1-sonar-small-128k-online"
+        ),
     }
+
+
+def validate_config() -> dict[str, Any]:
+    """Validate configuration and return it if valid.
+
+    Returns:
+        Validated configuration dictionary.
+
+    Raises:
+        ConfigurationError: If configuration is invalid.
+    """
+    config = get_config()
+
+    # Validate provider
+    valid_providers = [p.value for p in LLMProvider]
+    if config["llm_provider"] not in valid_providers:
+        raise ConfigurationError(
+            f"Invalid LLM_PROVIDER: {config['llm_provider']}. "
+            f"Valid options: {valid_providers}"
+        )
+
+    # Check that at least one provider is configured
+    if not config["hf_api_token"] and not config["perplexity_api_key"]:
+        logger.warning(
+            "No LLM API keys configured. Set HF_API_TOKEN or PERPLEXITY_API_KEY."
+        )
+
+    return config
+
 
 SYSTEM_PROMPT = """You are an expert Python code reviewer. Analyze the given code and respond with a JSON object containing your evaluation.
 
@@ -71,19 +130,62 @@ EVALUATION_PROMPT = """Analyze this Python code and provide your evaluation as J
 Remember: Respond with ONLY the JSON object, no markdown, no explanation."""
 
 
+def _build_messages(prompt: str) -> list[dict[str, str]]:
+    """Build the message list for LLM API calls.
+
+    Args:
+        prompt: The user prompt to include.
+
+    Returns:
+        List of message dictionaries.
+    """
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+
+
+def _build_prompt(code: str, filename: str | None = None) -> str:
+    """Build the evaluation prompt with optional filename context.
+
+    Args:
+        code: The code to evaluate.
+        filename: Optional filename for context.
+
+    Returns:
+        Formatted prompt string.
+    """
+    context = f"Filename: {filename}\n\n" if filename else ""
+    return context + EVALUATION_PROMPT.format(code=code)
+
+
 def get_hf_client() -> InferenceClient:
-    """Create and return a HuggingFace Inference client."""
+    """Create and return a HuggingFace Inference client.
+
+    Returns:
+        Configured InferenceClient.
+
+    Raises:
+        ConfigurationError: If HF_API_TOKEN is not set.
+    """
     config = get_config()
     if not config["hf_api_token"]:
-        raise ValueError("HF_API_TOKEN environment variable is not set")
+        raise ConfigurationError("HF_API_TOKEN environment variable is not set")
     return InferenceClient(token=config["hf_api_token"])
 
 
 def get_perplexity_client() -> OpenAI:
-    """Create and return a Perplexity client (OpenAI-compatible)."""
+    """Create and return a Perplexity client (OpenAI-compatible).
+
+    Returns:
+        Configured OpenAI client for Perplexity.
+
+    Raises:
+        ConfigurationError: If PERPLEXITY_API_KEY is not set.
+    """
     config = get_config()
     if not config["perplexity_api_key"]:
-        raise ValueError("PERPLEXITY_API_KEY environment variable is not set")
+        raise ConfigurationError("PERPLEXITY_API_KEY environment variable is not set")
     return OpenAI(
         api_key=config["perplexity_api_key"],
         base_url="https://api.perplexity.ai",
@@ -91,17 +193,13 @@ def get_perplexity_client() -> OpenAI:
 
 
 def parse_evaluation_response(response_text: str) -> dict:
-    """
-    Parse the LLM response into an evaluation dictionary.
+    """Parse the LLM response into an evaluation dictionary.
 
     Args:
         response_text: Raw response from the LLM.
 
     Returns:
         Parsed evaluation dictionary.
-
-    Raises:
-        ValueError: If response cannot be parsed as JSON.
     """
     text = response_text.strip()
 
@@ -111,11 +209,11 @@ def parse_evaluation_response(response_text: str) -> dict:
     end_idx = None
 
     for i, char in enumerate(text):
-        if char == '{':
+        if char == "{":
             if start_idx is None:
                 start_idx = i
             brace_count += 1
-        elif char == '}':
+        elif char == "}":
             brace_count -= 1
             if brace_count == 0 and start_idx is not None:
                 end_idx = i + 1
@@ -126,17 +224,21 @@ def parse_evaluation_response(response_text: str) -> dict:
 
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
-        # If JSON parsing fails, return a default evaluation with warning and raw response
-        print(f"WARNING: Could not parse LLM response as JSON.")
+    except json.JSONDecodeError as e:
+        logger.warning("Could not parse LLM response as JSON: %s", str(e))
+        # Truncate raw response for safety and readability
+        truncated_response = response_text[:MAX_RAW_RESPONSE_LENGTH]
+        if len(response_text) > MAX_RAW_RESPONSE_LENGTH:
+            truncated_response += "... [truncated]"
+
         return {
             "overall_score": 50,
-            "summary": "⚠️ WARNING: Could not parse response as JSON. Raw LLM response shown below.",
+            "summary": "Could not parse response as JSON. Try a different model.",
             "issues": [],
             "strengths": [],
             "improvement_areas": [
-                "Try a different model like 'mistralai/Mistral-7B-Instruct-v0.3'",
-                f"RAW RESPONSE: {response_text}"
+                "The model did not return valid JSON",
+                f"Raw response preview: {truncated_response}",
             ],
             "time_complexity": None,
             "memory_complexity": None,
@@ -144,8 +246,7 @@ def parse_evaluation_response(response_text: str) -> dict:
 
 
 def validate_and_build_evaluation(data: dict) -> CodeEvaluation:
-    """
-    Validate parsed data and build a CodeEvaluation object.
+    """Validate parsed data and build a CodeEvaluation object.
 
     Args:
         data: Parsed evaluation dictionary.
@@ -165,14 +266,16 @@ def validate_and_build_evaluation(data: dict) -> CodeEvaluation:
         except ValueError:
             severity = IssueSeverity.MEDIUM
 
-        issues.append(CodeIssue(
-            category=category,
-            severity=severity,
-            line_number=issue_data.get("line_number"),
-            description=issue_data.get("description", "No description provided"),
-            suggestion=issue_data.get("suggestion", "No suggestion provided"),
-            example_fix=issue_data.get("example_fix"),
-        ))
+        issues.append(
+            CodeIssue(
+                category=category,
+                severity=severity,
+                line_number=issue_data.get("line_number"),
+                description=issue_data.get("description", "No description provided"),
+                suggestion=issue_data.get("suggestion", "No suggestion provided"),
+                example_fix=issue_data.get("example_fix"),
+            )
+        )
 
     score = data.get("overall_score", 50)
     if not isinstance(score, (int, float)):
@@ -190,9 +293,74 @@ def validate_and_build_evaluation(data: dict) -> CodeEvaluation:
     )
 
 
-def evaluate_with_huggingface(prompt: str) -> str:
+def _call_huggingface(messages: list[dict], model_id: str) -> str:
+    """Call HuggingFace API with the given messages.
+
+    Args:
+        messages: List of message dictionaries.
+        model_id: The model ID to use.
+
+    Returns:
+        Response text from the model.
+
+    Raises:
+        EvaluationError: If the API call fails.
     """
-    Evaluate code using HuggingFace Inference API.
+    try:
+        client = get_hf_client()
+        response = client.chat_completion(
+            model=model_id,
+            messages=messages,
+            max_tokens=MAX_TOKENS,
+            temperature=TEMPERATURE,
+        )
+        return response.choices[0].message.content
+    except HfHubHTTPError as e:
+        logger.error("HuggingFace API error: %s", str(e))
+        raise EvaluationError(f"HuggingFace API error: {e}") from e
+    except Exception as e:
+        logger.error("Unexpected error calling HuggingFace: %s", str(e))
+        raise EvaluationError(f"HuggingFace error: {e}") from e
+
+
+def _call_perplexity(messages: list[dict], model_id: str) -> str:
+    """Call Perplexity API with the given messages.
+
+    Args:
+        messages: List of message dictionaries.
+        model_id: The model ID to use.
+
+    Returns:
+        Response text from the model.
+
+    Raises:
+        EvaluationError: If the API call fails.
+    """
+    try:
+        client = get_perplexity_client()
+        response = client.chat.completions.create(
+            model=model_id,
+            messages=messages,
+            max_tokens=MAX_TOKENS,
+            temperature=TEMPERATURE,
+        )
+        return response.choices[0].message.content
+    except APIConnectionError as e:
+        logger.error("Perplexity connection error: %s", str(e))
+        raise EvaluationError(f"Perplexity connection error: {e}") from e
+    except APITimeoutError as e:
+        logger.error("Perplexity timeout: %s", str(e))
+        raise EvaluationError(f"Perplexity timeout: {e}") from e
+    except RateLimitError as e:
+        logger.error("Perplexity rate limit: %s", str(e))
+        raise EvaluationError(f"Perplexity rate limit exceeded: {e}") from e
+    except Exception as e:
+        logger.error("Unexpected error calling Perplexity: %s", str(e))
+        raise EvaluationError(f"Perplexity error: {e}") from e
+
+
+def evaluate_with_huggingface(prompt: str) -> str:
+    """Evaluate code using HuggingFace Inference API.
 
     Args:
         prompt: The formatted evaluation prompt.
@@ -201,26 +369,12 @@ def evaluate_with_huggingface(prompt: str) -> str:
         Raw response text from the model.
     """
     config = get_config()
-    client = get_hf_client()
-
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
-    ]
-
-    response = client.chat_completion(
-        model=config["hf_model_id"],
-        messages=messages,
-        max_tokens=2048,
-        temperature=0.1,
-    )
-
-    return response.choices[0].message.content
+    messages = _build_messages(prompt)
+    return _call_huggingface(messages, config["hf_model_id"])
 
 
 def evaluate_with_model(prompt: str, model_id: str) -> str:
-    """
-    Evaluate code using a specific HuggingFace model.
+    """Evaluate code using a specific HuggingFace model.
 
     Args:
         prompt: The formatted evaluation prompt.
@@ -229,26 +383,12 @@ def evaluate_with_model(prompt: str, model_id: str) -> str:
     Returns:
         Raw response text from the model.
     """
-    client = get_hf_client()
-
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
-    ]
-
-    response = client.chat_completion(
-        model=model_id,
-        messages=messages,
-        max_tokens=2048,
-        temperature=0.1,
-    )
-
-    return response.choices[0].message.content
+    messages = _build_messages(prompt)
+    return _call_huggingface(messages, model_id)
 
 
 def evaluate_with_perplexity(prompt: str) -> str:
-    """
-    Evaluate code using Perplexity API.
+    """Evaluate code using Perplexity API.
 
     Args:
         prompt: The formatted evaluation prompt.
@@ -257,26 +397,40 @@ def evaluate_with_perplexity(prompt: str) -> str:
         Raw response text from the model.
     """
     config = get_config()
-    client = get_perplexity_client()
+    messages = _build_messages(prompt)
+    return _call_perplexity(messages, config["perplexity_model"])
 
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": prompt},
-    ]
 
-    response = client.chat.completions.create(
-        model=config["perplexity_model"],
-        messages=messages,
-        max_tokens=2048,
-        temperature=0.1,
-    )
+def _timed_evaluation(
+    evaluate_fn, prompt: str, *args
+) -> tuple[CodeEvaluation | None, float | None, str | None]:
+    """Execute an evaluation function with timing and error handling.
 
-    return response.choices[0].message.content
+    Args:
+        evaluate_fn: The evaluation function to call.
+        prompt: The prompt to pass to the function.
+        *args: Additional arguments for the function.
+
+    Returns:
+        Tuple of (evaluation, response_time, error).
+    """
+    try:
+        start = time.time()
+        response_text = evaluate_fn(prompt, *args) if args else evaluate_fn(prompt)
+        response_time = round(time.time() - start, 2)
+        evaluation_data = parse_evaluation_response(response_text)
+        evaluation = validate_and_build_evaluation(evaluation_data)
+        return evaluation, response_time, None
+    except (ConfigurationError, EvaluationError) as e:
+        logger.warning("Evaluation failed: %s", str(e))
+        return None, None, str(e)
+    except Exception as e:
+        logger.error("Unexpected evaluation error: %s", str(e))
+        return None, None, str(e)
 
 
 def evaluate_code_sync(code: str, filename: str | None = None) -> CodeEvaluation:
-    """
-    Evaluate Python code using the configured LLM provider.
+    """Evaluate Python code using the configured LLM provider.
 
     Args:
         code: The Python code to evaluate.
@@ -286,30 +440,30 @@ def evaluate_code_sync(code: str, filename: str | None = None) -> CodeEvaluation
         CodeEvaluation object containing the analysis results.
 
     Raises:
-        ValueError: If the response cannot be parsed or provider is invalid.
-        Exception: If the API request fails.
+        ConfigurationError: If the provider configuration is invalid.
+        EvaluationError: If the evaluation fails.
     """
     config = get_config()
-    context = ""
-    if filename:
-        context = f"Filename: {filename}\n\n"
+    prompt = _build_prompt(code, filename)
 
-    prompt = context + EVALUATION_PROMPT.format(code=code)
-
-    if config["llm_provider"] == LLMProvider.PERPLEXITY:
+    if config["llm_provider"] == LLMProvider.PERPLEXITY.value:
         response_text = evaluate_with_perplexity(prompt)
-    elif config["llm_provider"] == LLMProvider.HUGGINGFACE:
+    elif config["llm_provider"] == LLMProvider.HUGGINGFACE.value:
         response_text = evaluate_with_huggingface(prompt)
     else:
-        raise ValueError(f"Unknown LLM provider: {config['llm_provider']}. Use 'huggingface' or 'perplexity'.")
+        raise ConfigurationError(
+            f"Unknown LLM provider: {config['llm_provider']}. "
+            "Use 'huggingface' or 'perplexity'."
+        )
 
     evaluation_data = parse_evaluation_response(response_text)
     return validate_and_build_evaluation(evaluation_data)
 
 
 async def evaluate_code(code: str, filename: str | None = None) -> CodeEvaluation:
-    """
-    Async wrapper for evaluate_code_sync.
+    """Async wrapper for evaluate_code_sync.
+
+    Runs the synchronous evaluation in a thread pool to avoid blocking.
 
     Args:
         code: The Python code to evaluate.
@@ -318,12 +472,11 @@ async def evaluate_code(code: str, filename: str | None = None) -> CodeEvaluatio
     Returns:
         CodeEvaluation object containing the analysis results.
     """
-    return evaluate_code_sync(code, filename)
+    return await asyncio.to_thread(evaluate_code_sync, code, filename)
 
 
 def compare_providers(code: str, filename: str | None = None) -> dict:
-    """
-    Evaluate code using both providers and compare results.
+    """Evaluate code using both providers and compare results.
 
     Args:
         code: The Python code to evaluate.
@@ -332,13 +485,8 @@ def compare_providers(code: str, filename: str | None = None) -> dict:
     Returns:
         Dictionary with results from both providers and timing info.
     """
-    import time
-
     config = get_config()
-    context = ""
-    if filename:
-        context = f"Filename: {filename}\n\n"
-    prompt = context + EVALUATION_PROMPT.format(code=code)
+    prompt = _build_prompt(code, filename)
 
     results = {
         "huggingface": None,
@@ -351,36 +499,33 @@ def compare_providers(code: str, filename: str | None = None) -> dict:
 
     # Try HuggingFace
     if config["hf_api_token"]:
-        try:
-            start = time.time()
-            response_text = evaluate_with_huggingface(prompt)
-            results["huggingface_time"] = round(time.time() - start, 2)
-            evaluation_data = parse_evaluation_response(response_text)
-            results["huggingface"] = validate_and_build_evaluation(evaluation_data)
-        except Exception as e:
-            results["huggingface_error"] = str(e)
+        eval_result, time_taken, error = _timed_evaluation(
+            evaluate_with_huggingface, prompt
+        )
+        results["huggingface"] = eval_result
+        results["huggingface_time"] = time_taken
+        results["huggingface_error"] = error
     else:
         results["huggingface_error"] = "HF_API_TOKEN not configured"
 
     # Try Perplexity
     if config["perplexity_api_key"]:
-        try:
-            start = time.time()
-            response_text = evaluate_with_perplexity(prompt)
-            results["perplexity_time"] = round(time.time() - start, 2)
-            evaluation_data = parse_evaluation_response(response_text)
-            results["perplexity"] = validate_and_build_evaluation(evaluation_data)
-        except Exception as e:
-            results["perplexity_error"] = str(e)
+        eval_result, time_taken, error = _timed_evaluation(
+            evaluate_with_perplexity, prompt
+        )
+        results["perplexity"] = eval_result
+        results["perplexity_time"] = time_taken
+        results["perplexity_error"] = error
     else:
         results["perplexity_error"] = "PERPLEXITY_API_KEY not configured"
 
     return results
 
 
-def compare_hf_models(code: str, models: list[str], filename: str | None = None) -> list[dict]:
-    """
-    Evaluate code using multiple HuggingFace models.
+def compare_hf_models(
+    code: str, models: list[str], filename: str | None = None
+) -> list[dict]:
+    """Evaluate code using multiple HuggingFace models.
 
     Args:
         code: The Python code to evaluate.
@@ -390,8 +535,6 @@ def compare_hf_models(code: str, models: list[str], filename: str | None = None)
     Returns:
         List of result dictionaries with model_name, evaluation, response_time, and error.
     """
-    import time
-
     config = get_config()
     if not config["hf_api_token"]:
         return [
@@ -404,27 +547,20 @@ def compare_hf_models(code: str, models: list[str], filename: str | None = None)
             for model in models
         ]
 
-    context = ""
-    if filename:
-        context = f"Filename: {filename}\n\n"
-    prompt = context + EVALUATION_PROMPT.format(code=code)
+    prompt = _build_prompt(code, filename)
 
     results = []
     for model_id in models:
-        result = {
-            "model_name": model_id,
-            "evaluation": None,
-            "response_time": None,
-            "error": None,
-        }
-        try:
-            start = time.time()
-            response_text = evaluate_with_model(prompt, model_id)
-            result["response_time"] = round(time.time() - start, 2)
-            evaluation_data = parse_evaluation_response(response_text)
-            result["evaluation"] = validate_and_build_evaluation(evaluation_data)
-        except Exception as e:
-            result["error"] = str(e)
-        results.append(result)
+        eval_result, time_taken, error = _timed_evaluation(
+            evaluate_with_model, prompt, model_id
+        )
+        results.append(
+            {
+                "model_name": model_id,
+                "evaluation": eval_result,
+                "response_time": time_taken,
+                "error": error,
+            }
+        )
 
     return results

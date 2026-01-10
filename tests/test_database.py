@@ -1,10 +1,14 @@
 """Tests for database operations."""
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy.orm import Session
 
 from app.database import (
+    DatabaseError,
     EvaluationRecord,
+    _utc_now,
     create_evaluation,
     get_evaluation_by_id,
     get_evaluation_count,
@@ -139,3 +143,42 @@ class TestDatabaseQueries:
             )
 
         assert get_evaluation_count(test_db) == 3
+
+
+class TestUtcNow:
+    """Tests for the _utc_now function."""
+
+    def test_returns_datetime(self):
+        """Should return a datetime object."""
+        result = _utc_now()
+        assert isinstance(result, datetime)
+
+    def test_is_timezone_aware(self):
+        """Should return a timezone-aware datetime."""
+        result = _utc_now()
+        assert result.tzinfo is not None
+
+    def test_uses_utc(self):
+        """Should use UTC timezone."""
+        result = _utc_now()
+        assert result.tzinfo == UTC
+
+
+class TestDatabaseErrorHandling:
+    """Tests for database error handling."""
+
+    def test_create_evaluation_with_missing_required_field(self, test_db: Session):
+        """Test that missing required fields raise appropriate errors."""
+        # Missing overall_score should raise an error
+        with pytest.raises((DatabaseError, KeyError)):
+            create_evaluation(
+                db=test_db,
+                code="test",
+                filename=None,
+                evaluation_dict={"summary": "test"},  # missing overall_score
+            )
+
+    def test_database_error_exception_exists(self):
+        """DatabaseError exception should be defined."""
+        assert DatabaseError is not None
+        assert issubclass(DatabaseError, Exception)
