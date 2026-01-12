@@ -12,7 +12,11 @@
       "Bash(gh issue create:*)",
       "Bash(gh issue list:*)",
       "Bash(gh issue view:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(./venv/Scripts/python.exe -m pytest:*)",
+      "Bash(./venv/Scripts/pip.exe install:*)",
+      "Bash(./venv/Scripts/djlint.exe:*)"
     ]
   }
 }

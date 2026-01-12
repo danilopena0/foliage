@@ -153,6 +153,89 @@ class TestHomeEndpoint:
         assert "text/html" in response.headers["content-type"]
         assert "LLM Code Evaluator" in response.text
 
+    def test_home_page_has_form_elements(self, client: TestClient):
+        """Test that the home page contains required form elements."""
+        response = client.get("/")
+        html = response.text
+
+        # Check for form
+        assert '<form id="evaluationForm">' in html
+
+        # Check for code textarea
+        assert 'id="code"' in html
+        assert 'name="code"' in html
+
+        # Check for filename input
+        assert 'id="filename"' in html
+        assert 'name="filename"' in html
+
+        # Check for submit buttons
+        assert 'id="submitBtn"' in html
+        assert 'id="compareBtn"' in html
+        assert 'id="compareModelsBtn"' in html
+
+    def test_home_page_has_results_section(self, client: TestClient):
+        """Test that the home page contains results display elements."""
+        response = client.get("/")
+        html = response.text
+
+        # Check for results containers
+        assert 'id="results"' in html
+        assert 'id="singleResult"' in html
+        assert 'id="comparisonResult"' in html
+        assert 'id="multiModelResult"' in html
+
+        # Check for loading indicator
+        assert 'id="loading"' in html
+        assert 'class="spinner"' in html
+
+        # Check for error display
+        assert 'id="error"' in html
+
+    def test_home_page_has_model_selector(self, client: TestClient):
+        """Test that the home page contains model selection UI."""
+        response = client.get("/")
+        html = response.text
+
+        assert 'id="modelCheckboxes"' in html
+        assert 'id="modelCount"' in html
+        assert "Select 2-4 models" in html
+
+    def test_home_page_has_required_scripts(self, client: TestClient):
+        """Test that the home page contains necessary JavaScript."""
+        response = client.get("/")
+        html = response.text
+
+        # Check for key JavaScript functions
+        assert "loadModels" in html
+        assert "runEvaluation" in html
+        assert "renderEvaluation" in html
+        assert "escapeHtml" in html
+
+        # Check for API endpoints in JS
+        assert "/api/evaluate" in html
+        assert "/api/compare" in html
+        assert "/api/models" in html
+        assert "/api/compare-models" in html
+
+    def test_home_page_has_valid_html_structure(self, client: TestClient):
+        """Test that the home page has valid HTML structure."""
+        response = client.get("/")
+        html = response.text
+
+        # Check for proper HTML5 structure
+        assert "<!DOCTYPE html>" in html
+        assert '<html lang="en">' in html
+        assert "<head>" in html
+        assert "</head>" in html
+        assert "<body>" in html
+        assert "</body>" in html
+        assert "</html>" in html
+
+        # Check for required meta tags
+        assert 'charset="UTF-8"' in html
+        assert 'name="viewport"' in html
+
 
 class TestModelsEndpoint:
     """Tests for the /api/models endpoint."""
