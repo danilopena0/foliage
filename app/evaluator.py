@@ -345,12 +345,12 @@ def _call_perplexity(messages: list[dict], model_id: str) -> str:
             temperature=TEMPERATURE,
         )
         return response.choices[0].message.content
-    except APIConnectionError as e:
-        logger.error("Perplexity connection error: %s", str(e))
-        raise EvaluationError(f"Perplexity connection error: {e}") from e
     except APITimeoutError as e:
         logger.error("Perplexity timeout: %s", str(e))
         raise EvaluationError(f"Perplexity timeout: {e}") from e
+    except APIConnectionError as e:
+        logger.error("Perplexity connection error: %s", str(e))
+        raise EvaluationError(f"Perplexity connection error: {e}") from e
     except RateLimitError as e:
         logger.error("Perplexity rate limit: %s", str(e))
         raise EvaluationError(f"Perplexity rate limit exceeded: {e}") from e

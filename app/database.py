@@ -53,7 +53,7 @@ class EvaluationRecord(Base):
 
     def set_evaluation(self, evaluation_dict: dict) -> None:
         """Store evaluation data as JSON."""
-        self.evaluation_json = json.dumps(evaluation_dict)
+        self.evaluation_json = json.dumps(evaluation_dict)  # type: ignore[assignment]
 
     def get_evaluation(self) -> dict:
         """Retrieve evaluation data from JSON."""
@@ -152,7 +152,7 @@ def get_evaluation_history(
     Returns:
         List of evaluation records.
     """
-    return (
+    return (  # type: ignore[return-value]
         db.query(EvaluationRecord)
         .order_by(EvaluationRecord.created_at.desc(), EvaluationRecord.id.desc())
         .offset(skip)
